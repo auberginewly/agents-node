@@ -1,0 +1,19 @@
+{
+  "name": "agents-node",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "本地 Coding Agent CLI（Anthropic-compatible API）",
+  "scripts": {
+    "start": "node agent.mjs",
+    "agent": "node agent.mjs",
+    "agent:minimal": "node agent.mjs --minimal"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "dotenv": "^16.4.7",
+    "marked": "^15.0.12",
+    "marked-terminal": "^7.3.0",
+    "string-width": "^7.2.0"
+  }
+}
