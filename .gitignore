@@ -12,6 +12,7 @@ yarn-error.log*
 .transcripts/
 .team/
 .agent-cache/
+.web-sessions/
 
 # OS / 编辑器
 .DS_Store
@@ -26,3 +27,5 @@ Thumbs.db
 dist/
 coverage/
 .nyc_output/
+
+.docs/

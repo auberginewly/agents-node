@@ -187,14 +187,33 @@ export function createAgentRuntime({ client, model, repoRoot, minimal }) {
     }
   }
 
-  async function agentLoop(messages) {
+  const preferStream =
+    process.env.AGENT_STREAM !== "0" && process.env.AGENT_NO_STREAM !== "1";
+
+  /**
+   * @param {object} [options]
+   * @param {function} [options.eventSink] Web 用：推送 assistant / tool_* / log；传入时终端不打印工具框。
+   * @param {AbortSignal} [options.abortSignal] 取消进行中的模型流（如客户端断开 SSE）。
+   */
+  async function agentLoop(messages, options = {}) {
+    const { eventSink, abortSignal } = options;
+    const emit = (evt) => {
+      try {
+        eventSink?.(evt);
+      } catch {
+        /* ignore */
+      }
+    };
+    const logToolsToConsole = !eventSink;
+
     let roundsSinceTodo = 0;
 
     while (true) {
       if (!minimal) {
         microCompact(messages);
         if (estimateTokens(messages) > TOKEN_THRESHOLD) {
-          console.log("[auto_compact triggered]");
+          if (logToolsToConsole) console.log("[auto_compact triggered]");
+          emit({ type: "log", message: "auto_compact triggered" });
           const replacement = await autoCompact(
             client,
             model,
@@ -207,15 +226,42 @@ export function createAgentRuntime({ client, model, repoRoot, minimal }) {
         injectPreLlmHooks(messages);
       }
 
-      const response = await client.messages.create({
+      const streamParams = {
         model,
         system,
         messages,
         tools,
         max_tokens: 8000,
-      });
+      };
+
+      let response;
+      if (preferStream) {
+        const stream = client.messages.stream(streamParams, {
+          signal: abortSignal,
+        });
+        if (eventSink) {
+          stream.on("text", (delta) => {
+            if (delta) emit({ type: "assistant_delta", text: delta });
+          });
+        }
+        try {
+          response = await stream.finalMessage();
+        } catch (e) {
+          if (abortSignal?.aborted) throw e;
+          throw e;
+        }
+      } else {
+        response = await client.messages.create(streamParams, {
+          signal: abortSignal,
+        });
+      }
 
       messages.push({ role: "assistant", content: response.content });
+      emit({
+        type: "assistant",
+        stopReason: response.stop_reason,
+        content: response.content,
+      });
 
       if (response.stop_reason !== "tool_use") {
         return;
@@ -230,11 +276,20 @@ export function createAgentRuntime({ client, model, repoRoot, minimal }) {
         if (block.type !== "tool_use") continue;
 
         let output;
+        emit({
+          type: "tool_start",
+          name: block.name,
+          id: block.id,
+          input: block.input ?? {},
+        });
+        const t0 = Date.now();
         if (block.name === "task") {
           const desc = block.input?.description ?? "subtask";
-          console.log(
-            `> task (${desc}): ${String(block.input?.prompt ?? "").slice(0, 80)}`,
-          );
+          if (logToolsToConsole) {
+            console.log(
+              `> task (${desc}): ${String(block.input?.prompt ?? "").slice(0, 80)}`,
+            );
+          }
           output = await parentHandlers.task(block.input ?? {});
         } else if (block.name === "compact") {
           manualCompact = true;
@@ -252,16 +307,26 @@ export function createAgentRuntime({ client, model, repoRoot, minimal }) {
 
         if (block.name === "todo") usedTodo = true;
 
-        if (minimal && block.name === "bash") {
-          const cmd = block.input?.command ?? "";
-          console.log(formatBashLog(cmd, output));
-        } else {
-          console.log(
-            formatToolLogPreview(block.name, output, {
-              toolInput: block.input ?? {},
-              repoRoot,
-            }),
-          );
+        emit({
+          type: "tool_end",
+          name: block.name,
+          id: block.id,
+          output: String(output).slice(0, 24_000),
+          durationMs: Date.now() - t0,
+        });
+
+        if (logToolsToConsole) {
+          if (minimal && block.name === "bash") {
+            const cmd = block.input?.command ?? "";
+            console.log(formatBashLog(cmd, output));
+          } else {
+            console.log(
+              formatToolLogPreview(block.name, output, {
+                toolInput: block.input ?? {},
+                repoRoot,
+              }),
+            );
+          }
         }
 
         userContent.push({
@@ -297,7 +362,8 @@ export function createAgentRuntime({ client, model, repoRoot, minimal }) {
       messages.push({ role: "user", content: userContent });
 
       if (!minimal && manualCompact) {
-        console.log("[manual compact]");
+        if (logToolsToConsole) console.log("[manual compact]");
+        emit({ type: "log", message: "manual compact" });
         const replacement = await autoCompact(
           client,
           model,

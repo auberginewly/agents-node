@@ -7,13 +7,23 @@
   "scripts": {
     "start": "node agent.mjs",
     "agent": "node agent.mjs",
-    "agent:minimal": "node agent.mjs --minimal"
+    "agent:minimal": "node agent.mjs --minimal",
+    "build:web": "vite build --config web/vite.config.mjs",
+    "web:dev": "vite --config web/vite.config.mjs",
+    "web": "node server/index.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "dompurify": "^3.3.3",
     "dotenv": "^16.4.7",
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "string-width": "^7.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.1",
+    "vite": "^8.0.1"
   }
 }

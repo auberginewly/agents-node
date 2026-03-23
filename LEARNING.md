@@ -11,6 +11,7 @@
 | 工作区 | **`REPO_ROOT`** 默认 = 本仓库根目录；换沙箱根目录见 **README** |
 | 源码分包 | `src/core/` · `src/ui/` · `src/agent/` · `src/tools/` · `src/tasks/` · `src/skills/` · `src/team/` |
 | `read_file` 终端 | 默认超长折叠预览；`/read expand` · `/read pager` · `/read collapse`；`.md` 走 Markdown→ANSI（`src/ui/terminal-fmt.mjs`） |
+| Web 演示 | `npm run build:web` 后 `npm run web` → `server/index.mjs` 托管 `web/dist`；会话落盘 `.web-sessions/`；SSE 含 `assistant_delta` 流式与 `assistant` 定稿（`loop.mjs` 中 `client.messages.stream` + `eventSink`） |
 
 ---
 

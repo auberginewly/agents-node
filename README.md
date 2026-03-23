@@ -17,6 +17,27 @@ npm start
 - **`npm run agent:minimal`**：只开 `bash`，适合当「远程 shell 助手」试连通性。
 - 退出：输入 `q` / `exit`，或 `Ctrl+C`。
 
+## Web 演示（浏览器）
+
+同一套 Agent 循环，通过 **HTTP + SSE** 推事件到 **React + Vite** 前端（聊天 + 工具侧栏）。
+
+```bash
+npm run build:web   # 首次或改完 web/src 后
+npm run web
+```
+
+浏览器打开终端里提示的地址（默认 **http://127.0.0.1:3847/**）。静态资源优先读 **`web/dist/`**（由 `build:web` 生成）；未构建时终端会提示。开发时可双开：**终端 A** `npm run web`，**终端 B** `npm run web:dev`（Vite **5173**，`/api` 代理到本服务；代理目标可用 `VITE_API_ORIGIN` 覆盖）。需已配置 `.env`。端口：`WEB_PORT`。若 **3847 已被占用**，服务会自动试 3848、3849…；也可关掉旧进程：`lsof -ti :3847 | xargs kill`。
+
+- `GET /api/health` — 返回 `model`、`repoRoot` 等（页面顶部信息）  
+- `GET /api/suggestions` — 调用当前模型生成 3 条空会话示例问题（JSON）；失败时返回内置兜底。设 **`WEB_SUGGESTIONS_AI=0`** 可关闭模型调用、始终返回兜底（省 token / 离线）  
+- `GET /api/sessions` — 会话列表摘要（`id`、`preview`、`messageCount`、`updatedAt`）  
+- `GET /api/sessions/:id` — 指定会话的完整 `messages[]`（Anthropic 结构）  
+- `DELETE /api/sessions/:id` — 删除会话（磁盘 + 内存）  
+- `POST /api/chat` — body：`{ "message": "…", "sessionId": "可选 UUID" }`，响应为 **SSE**：`session` / **`assistant_delta`**（流式正文）/ `assistant`（整轮定稿）/ `tool_start` / `tool_end` / `log` / `done` / `error`  
+
+**说明**：会话持久化在工作区 **`.web-sessions/<uuid>.json`**（已写入 `.gitignore`）；**刷新或重启 Node** 后前端会拉列表并恢复。客户端断开时服务端会 **Abort** 正在进行的模型流。环境变量 **`AGENT_STREAM=0`** 或 **`AGENT_NO_STREAM=1`** 可关闭流式、改回单次 `messages.create`（部分网关不兼容流式时用）。仅适合本机演示，勿直接暴露公网。  
+助手气泡使用 **Markdown**（`marked` + `DOMPurify`，由 Vite 打包进前端）。
+
 ## 工作区
 
 默认 **本仓库根目录** 就是沙箱（`read_file` / `write_file` / `bash` 的 `cwd` 等都以它为根）。  
@@ -47,6 +68,9 @@ AGENT_WORKSPACE=..
 |------|------|
 | `npm start` / `npm run agent` | 全量工具 |
 | `npm run agent:minimal` | 仅 bash |
+| `npm run build:web` | 构建 Web 前端到 `web/dist/` |
+| `npm run web:dev` | Vite 开发服（5173，代理 `/api`） |
+| `npm run web` | Web UI + SSE（默认 3847 端口，读 `web/dist`） |
 
 ## 源码布局
 
@@ -59,6 +83,8 @@ AGENT_WORKSPACE=..
 | `src/tasks/` | 会话 todo、磁盘任务、后台 shell |
 | `src/skills/` | Skill 加载 |
 | `src/team/` | 团队邮箱与队友循环 |
+| `server/` | Web：`index.mjs` 静态托管 `web/dist`（或回退 `web/`）+ `/api/chat` SSE |
+| `web/` | 演示前端：Vite + React（`web/src`） |
 
 ## 可选阅读
 
